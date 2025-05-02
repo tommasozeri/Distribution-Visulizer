@@ -1,0 +1,497 @@
+classdef DistributionVisualizerApp < matlab.apps.AppBase
+
+    % Properties that correspond to app components
+    properties (Access = public)
+        UIFigure            matlab.ui.Figure
+        GridLayout         matlab.ui.container.GridLayout
+        ControlPanel       matlab.ui.container.Panel
+        PlotPanel          matlab.ui.container.Panel
+        DistributionDropDown  matlab.ui.control.DropDown
+        DistributionLabel   matlab.ui.control.Label
+        PDFAxes            matlab.ui.control.UIAxes
+        CDFAxes            matlab.ui.control.UIAxes
+        HistogramAxes      matlab.ui.control.UIAxes
+        Parameter1Label    matlab.ui.control.Label
+        Parameter1Slider   matlab.ui.control.Slider
+        Parameter2Label    matlab.ui.control.Label
+        Parameter2Slider   matlab.ui.control.Slider
+        NumPointsLabel     matlab.ui.control.Label
+        NumPointsEditField matlab.ui.control.NumericEditField
+    end
+
+    properties (Access = private)
+        CurrentDistribution % Current selected distribution
+    end
+
+    % Component initialization
+    methods (Access = private)
+
+        % Create UIFigure and components
+        function createComponents(app)
+            % Create UIFigure with GridLayout
+            app.UIFigure = uifigure('Visible', 'off');
+            app.UIFigure.Position = [100 100 1200 800];
+            app.UIFigure.Name = 'Distribution Visualizer';
+            app.UIFigure.Color = [0.96 0.96 0.96];
+            
+            % Create main GridLayout (2 columns)
+            app.GridLayout = uigridlayout(app.UIFigure);
+            app.GridLayout.ColumnWidth = {'0.7x', '1.3x'};
+            app.GridLayout.RowHeight = {'1x'};
+            app.GridLayout.BackgroundColor = [0.96 0.96 0.96];
+            app.GridLayout.Padding = [10 10 10 10];
+            app.GridLayout.RowSpacing = 10;
+            app.GridLayout.ColumnSpacing = 15;
+            
+            % Create Control Panel (left column)
+            app.ControlPanel = uipanel(app.GridLayout);
+            app.ControlPanel.Layout.Row = 1;
+            app.ControlPanel.Layout.Column = 1;
+            app.ControlPanel.Title = 'Controls';
+            app.ControlPanel.BackgroundColor = [0.98 0.98 0.98];
+            app.ControlPanel.FontName = 'Arial';
+            app.ControlPanel.FontSize = 12;
+            app.ControlPanel.FontWeight = 'bold';
+            
+            % Create Plot Panel (right column)
+            app.PlotPanel = uipanel(app.GridLayout);
+            app.PlotPanel.Layout.Row = 1;
+            app.PlotPanel.Layout.Column = 2;
+            app.PlotPanel.Title = 'Visualizations';
+            app.PlotPanel.BackgroundColor = [0.98 0.98 0.98];
+            app.PlotPanel.FontName = 'Arial';
+            app.PlotPanel.FontSize = 12;
+            app.PlotPanel.FontWeight = 'bold';
+            
+            % Create control components in ControlPanel
+            controlGrid = uigridlayout(app.ControlPanel);
+            controlGrid.RowHeight = {22, 22, 22, 22, 22, 22, 22, '1x'};
+            controlGrid.ColumnWidth = {'0.4x', '1x'};
+            controlGrid.RowSpacing = 15;
+            controlGrid.ColumnSpacing = 10;
+            controlGrid.Padding = [20 20 20 20];
+            
+            % Distribution controls
+            app.DistributionLabel = uilabel(controlGrid);
+            app.DistributionLabel.Layout.Row = 1;
+            app.DistributionLabel.Layout.Column = 1;
+            app.DistributionLabel.Text = 'Distribution:';
+            app.DistributionLabel.FontName = 'Arial';
+            app.DistributionLabel.FontSize = 11;
+            app.DistributionLabel.FontWeight = 'bold';
+            
+            app.DistributionDropDown = uidropdown(controlGrid);
+            app.DistributionDropDown.Layout.Row = 1;
+            app.DistributionDropDown.Layout.Column = 2;
+            app.DistributionDropDown.Items = {'Normal', 'Exponential', 'Gamma', 'Pareto', ...
+                'Poisson', 'Weibull', 'LogNormal', 'Binomial', 'Student-t', 'Chi-Squared'};
+            app.DistributionDropDown.Value = 'Normal';
+            app.DistributionDropDown.FontName = 'Arial';
+            app.DistributionDropDown.FontSize = 11;
+            app.DistributionDropDown.ValueChangedFcn = createCallbackFcn(app, @DistributionDropDownValueChanged, true);
+            
+            % Parameter 1 controls
+            app.Parameter1Label = uilabel(controlGrid);
+            app.Parameter1Label.Layout.Row = 2;
+            app.Parameter1Label.Layout.Column = 1;
+            app.Parameter1Label.Text = 'Parameter 1:';
+            app.Parameter1Label.FontName = 'Arial';
+            app.Parameter1Label.FontSize = 11;
+            app.Parameter1Label.FontWeight = 'bold';
+            
+            app.Parameter1Slider = uislider(controlGrid);
+            app.Parameter1Slider.Layout.Row = 3;
+            app.Parameter1Slider.Layout.Column = [1 2];
+            app.Parameter1Slider.FontName = 'Arial';
+            app.Parameter1Slider.ValueChangedFcn = createCallbackFcn(app, @ParameterSliderValueChanged, true);
+            
+            % Parameter 2 controls
+            app.Parameter2Label = uilabel(controlGrid);
+            app.Parameter2Label.Layout.Row = 4;
+            app.Parameter2Label.Layout.Column = 1;
+            app.Parameter2Label.Text = 'Parameter 2:';
+            app.Parameter2Label.FontName = 'Arial';
+            app.Parameter2Label.FontSize = 11;
+            app.Parameter2Label.FontWeight = 'bold';
+            
+            app.Parameter2Slider = uislider(controlGrid);
+            app.Parameter2Slider.Layout.Row = 5;
+            app.Parameter2Slider.Layout.Column = [1 2];
+            app.Parameter2Slider.FontName = 'Arial';
+            app.Parameter2Slider.ValueChangedFcn = createCallbackFcn(app, @ParameterSliderValueChanged, true);
+            
+            % Number of points controls
+            app.NumPointsLabel = uilabel(controlGrid);
+            app.NumPointsLabel.Layout.Row = 6;
+            app.NumPointsLabel.Layout.Column = 1;
+            app.NumPointsLabel.Text = 'Sample Size:';
+            app.NumPointsLabel.FontName = 'Arial';
+            app.NumPointsLabel.FontSize = 11;
+            app.NumPointsLabel.FontWeight = 'bold';
+            
+            app.NumPointsEditField = uieditfield(controlGrid, 'numeric');
+            app.NumPointsEditField.Layout.Row = 6;
+            app.NumPointsEditField.Layout.Column = 2;
+            app.NumPointsEditField.Value = 1000;
+            app.NumPointsEditField.FontName = 'Arial';
+            app.NumPointsEditField.FontSize = 11;
+            app.NumPointsEditField.ValueChangedFcn = createCallbackFcn(app, @NumPointsEditFieldValueChanged, true);
+            
+            % Create plot axes in PlotPanel using a 2x2 grid
+            plotGrid = uigridlayout(app.PlotPanel);
+            plotGrid.RowHeight = {'1x', '1x'};
+            plotGrid.ColumnWidth = {'1x', '1x'};
+            plotGrid.RowSpacing = 15;
+            plotGrid.ColumnSpacing = 15;
+            plotGrid.Padding = [15 15 15 15];
+            
+            % PDF Axes
+            app.PDFAxes = uiaxes(plotGrid);
+            app.PDFAxes.Layout.Row = 1;
+            app.PDFAxes.Layout.Column = 1;
+            app.PDFAxes.FontName = 'Arial';
+            app.PDFAxes.FontSize = 10;
+            app.PDFAxes.XGrid = 'on';
+            app.PDFAxes.YGrid = 'on';
+            app.PDFAxes.Box = 'on';
+            app.PDFAxes.LineWidth = 1;
+            
+            % CDF Axes
+            app.CDFAxes = uiaxes(plotGrid);
+            app.CDFAxes.Layout.Row = 1;
+            app.CDFAxes.Layout.Column = 2;
+            app.CDFAxes.FontName = 'Arial';
+            app.CDFAxes.FontSize = 10;
+            app.CDFAxes.XGrid = 'on';
+            app.CDFAxes.YGrid = 'on';
+            app.CDFAxes.Box = 'on';
+            app.CDFAxes.LineWidth = 1;
+            
+            % Histogram Axes (span both columns)
+            app.HistogramAxes = uiaxes(plotGrid);
+            app.HistogramAxes.Layout.Row = 2;
+            app.HistogramAxes.Layout.Column = [1 2];
+            app.HistogramAxes.FontName = 'Arial';
+            app.HistogramAxes.FontSize = 10;
+            app.HistogramAxes.XGrid = 'on';
+            app.HistogramAxes.YGrid = 'on';
+            app.HistogramAxes.Box = 'on';
+            app.HistogramAxes.LineWidth = 1;
+            
+            % Show the figure after all components are created
+            app.UIFigure.Visible = 'on';
+            
+            % Initialize distribution parameters
+            app.updateDistributionParameters();
+            app.plotAllDistributions();
+        end
+        
+        function updateDistributionParameters(app)
+            % Update UI controls based on selected distribution
+            dist = app.DistributionDropDown.Value;
+            app.CurrentDistribution = dist;
+            
+            switch dist
+                case 'Normal'
+                    app.Parameter1Label.Text = 'Mean (μ):';
+                    app.Parameter1Slider.Limits = [-10 10];
+                    app.Parameter1Slider.Value = 0;
+                    
+                    app.Parameter2Label.Text = 'Std Dev (σ):';
+                    app.Parameter2Slider.Limits = [0.1 5];
+                    app.Parameter2Slider.Value = 1;
+                    app.Parameter2Slider.Visible = 'on';
+                    app.Parameter2Label.Visible = 'on';
+                    
+                case 'Exponential'
+                    app.Parameter1Label.Text = 'Rate (λ):';
+                    app.Parameter1Slider.Limits = [0.1 5];
+                    app.Parameter1Slider.Value = 1;
+                    
+                    app.Parameter2Label.Visible = 'off';
+                    app.Parameter2Slider.Visible = 'off';
+                    
+                case 'Gamma'
+                    app.Parameter1Label.Text = 'Shape (k):';
+                    app.Parameter1Slider.Limits = [0.1 10];
+                    app.Parameter1Slider.Value = 2;
+                    
+                    app.Parameter2Label.Text = 'Scale (θ):';
+                    app.Parameter2Slider.Limits = [0.1 5];
+                    app.Parameter2Slider.Value = 1;
+                    app.Parameter2Slider.Visible = 'on';
+                    app.Parameter2Label.Visible = 'on';
+                    
+                case 'Binomial'
+                    app.Parameter1Label.Text = 'Trials (n):';
+                    app.Parameter1Slider.Limits = [1 50];
+                    app.Parameter1Slider.Value = 10;
+                    app.Parameter1Slider.MajorTicks = 1:50;
+                    
+                    app.Parameter2Label.Text = 'Prob (p):';
+                    app.Parameter2Slider.Limits = [0 1];
+                    app.Parameter2Slider.Value = 0.5;
+                    app.Parameter2Slider.Visible = 'on';
+                    app.Parameter2Label.Visible = 'on';
+                    
+                case 'Poisson'
+                    app.Parameter1Label.Text = 'Rate (λ):';
+                    app.Parameter1Slider.Limits = [0.1 20];
+                    app.Parameter1Slider.Value = 5;
+                    
+                    app.Parameter2Label.Visible = 'off';
+                    app.Parameter2Slider.Visible = 'off';
+                    
+                case 'Weibull'
+                    app.Parameter1Label.Text = 'Shape (k):';
+                    app.Parameter1Slider.Limits = [0.1 5];
+                    app.Parameter1Slider.Value = 1;
+                    
+                    app.Parameter2Label.Text = 'Scale (λ):';
+                    app.Parameter2Slider.Limits = [0.1 10];
+                    app.Parameter2Slider.Value = 1;
+                    app.Parameter2Slider.Visible = 'on';
+                    app.Parameter2Label.Visible = 'on';
+                    
+                case 'LogNormal'
+                    app.Parameter1Label.Text = 'Location (μ):';
+                    app.Parameter1Slider.Limits = [-2 2];
+                    app.Parameter1Slider.Value = 0;
+                    
+                    app.Parameter2Label.Text = 'Scale (σ):';
+                    app.Parameter2Slider.Limits = [0.1 2];
+                    app.Parameter2Slider.Value = 1;
+                    app.Parameter2Slider.Visible = 'on';
+                    app.Parameter2Label.Visible = 'on';
+                    
+                case 'Student-t'
+                    app.Parameter1Label.Text = 'DoF (ν):';
+                    app.Parameter1Slider.Limits = [1 30];
+                    app.Parameter1Slider.Value = 5;
+                    app.Parameter1Slider.MajorTicks = 1:30;
+                    
+                    app.Parameter2Label.Visible = 'off';
+                    app.Parameter2Slider.Visible = 'off';
+                    
+                case 'Chi-Squared'
+                    app.Parameter1Label.Text = 'DoF (k):';
+                    app.Parameter1Slider.Limits = [1 30];
+                    app.Parameter1Slider.Value = 5;
+                    app.Parameter1Slider.MajorTicks = 1:30;
+                    
+                    app.Parameter2Label.Visible = 'off';
+                    app.Parameter2Slider.Visible = 'off';
+                    
+                case 'Pareto'
+                    app.Parameter1Label.Text = 'Shape (α):';
+                    app.Parameter1Slider.Limits = [0.1 5];
+                    app.Parameter1Slider.Value = 1;
+                    
+                    app.Parameter2Label.Text = 'Scale (xm):';
+                    app.Parameter2Slider.Limits = [0.1 5];
+                    app.Parameter2Slider.Value = 1;
+                    app.Parameter2Slider.Visible = 'on';
+                    app.Parameter2Label.Visible = 'on';
+            end
+        end
+        
+        function plotAllDistributions(app)
+            dist = app.CurrentDistribution;
+            param1 = app.Parameter1Slider.Value;
+            param2 = app.Parameter2Slider.Value;
+            n = app.NumPointsEditField.Value;
+            
+            % Determine plot range based on distribution
+            switch dist
+                case {'Normal', 'Student-t'}
+                    x = linspace(-10, 10, 500);
+                case 'Exponential'
+                    x = linspace(0, 10, 500);
+                case {'Gamma', 'Chi-Squared'}
+                    x = linspace(0, 20, 500);
+                case 'Binomial'
+                    x = 0:param1;
+                case 'Poisson'
+                    x = 0:20;
+                case 'Weibull'
+                    x = linspace(0, 10, 500);
+                case 'LogNormal'
+                    x = linspace(0, 5, 500);
+                case 'Pareto'
+                    x = linspace(param2, param2+10, 500);
+            end
+            
+            % Calculate distribution values
+            switch dist
+                case 'Normal'
+                    y_pdf = normpdf(x, param1, param2);
+                    y_cdf = normcdf(x, param1, param2);
+                case 'Exponential'
+                    y_pdf = exppdf(x, 1/param1);
+                    y_cdf = expcdf(x, 1/param1);
+                case 'Gamma'
+                    y_pdf = gampdf(x, param1, param2);
+                    y_cdf = gamcdf(x, param1, param2);
+                case 'Binomial'
+                    y_pdf = binopdf(x, param1, param2);
+                    y_cdf = binocdf(x, param1, param2);
+                case 'Poisson'
+                    y_pdf = poisspdf(x, param1);
+                    y_cdf = poisscdf(x, param1);
+                case 'Weibull'
+                    y_pdf = wblpdf(x, param2, param1);
+                    y_cdf = wblcdf(x, param2, param1);
+                case 'LogNormal'
+                    y_pdf = lognpdf(x, param1, param2);
+                    y_cdf = logncdf(x, param1, param2);
+                case 'Student-t'
+                    y_pdf = tpdf(x, param1);
+                    y_cdf = tcdf(x, param1);
+                case 'Chi-Squared'
+                    y_pdf = chi2pdf(x, param1);
+                    y_cdf = chi2cdf(x, param1);
+                case 'Pareto'
+                    y_pdf = gppdf(x-param2, 1/param1, param2);
+                    y_cdf = gpcdf(x-param2, 1/param1, param2);
+            end
+            
+            % Generate random samples for histogram
+            switch dist
+                case 'Normal'
+                    samples = normrnd(param1, param2, [1, n]);
+                case 'Exponential'
+                    samples = exprnd(1/param1, [1, n]);
+                case 'Gamma'
+                    samples = gamrnd(param1, param2, [1, n]);
+                case 'Binomial'
+                    samples = binornd(param1, param2, [1, n]);
+                case 'Poisson'
+                    samples = poissrnd(param1, [1, n]);
+                case 'Weibull'
+                    samples = wblrnd(param2, param1, [1, n]);
+                case 'LogNormal'
+                    samples = lognrnd(param1, param2, [1, n]);
+                case 'Student-t'
+                    samples = trnd(param1, [1, n]);
+                case 'Chi-Squared'
+                    samples = chi2rnd(param1, [1, n]);
+                case 'Pareto'
+                    samples = gprnd(1/param1, param2, param2, [1, n]);
+            end
+            
+            % Plot PDF
+            cla(app.PDFAxes);
+            plot(app.PDFAxes, x, y_pdf, 'b-', 'LineWidth', 1.5);
+            title(app.PDFAxes, 'Probability Density Function');
+            xlabel(app.PDFAxes, 'x');
+            ylabel(app.PDFAxes, 'Density');
+            grid(app.PDFAxes, 'on');
+            ylim(app.PDFAxes, [0 max(y_pdf)*1.1]);
+            
+            % Plot CDF
+            cla(app.CDFAxes);
+            plot(app.CDFAxes, x, y_cdf, 'r-', 'LineWidth', 1.5);
+            title(app.CDFAxes, 'Cumulative Distribution Function');
+            xlabel(app.CDFAxes, 'x');
+            ylabel(app.CDFAxes, 'Probability');
+            grid(app.CDFAxes, 'on');
+            ylim(app.CDFAxes, [0 1.1]);
+            
+            % Plot Histogram with PDF overlay
+            cla(app.HistogramAxes);
+            histogram(app.HistogramAxes, samples, 'Normalization', 'pdf', ...
+                'FaceColor', [0.7 0.7 0.7], 'FaceAlpha', 0.7, 'EdgeColor', 'none');
+            hold(app.HistogramAxes, 'on');
+            plot(app.HistogramAxes, x, y_pdf, 'b-', 'LineWidth', 1.5);
+            hold(app.HistogramAxes, 'off');
+            title(app.HistogramAxes, ['Histogram (n=' num2str(n) ') with PDF Overlay']);
+            xlabel(app.HistogramAxes, 'x');
+            ylabel(app.HistogramAxes, 'Density');
+            grid(app.HistogramAxes, 'on');
+            legend(app.HistogramAxes, {'Histogram', 'Theoretical PDF'}, 'Location', 'northeast');
+            ylim(app.HistogramAxes, [0 max(y_pdf)*1.1]);
+            
+            % Add parameter information to titles
+            paramStr = app.getParameterString(dist, param1, param2);
+            subtitle(app.PDFAxes, [dist ' Distribution: ' paramStr], 'FontSize', 10);
+            subtitle(app.CDFAxes, [dist ' Distribution: ' paramStr], 'FontSize', 10);
+            subtitle(app.HistogramAxes, [dist ' Distribution: ' paramStr], 'FontSize', 10);
+        end
+        
+        function paramStr = getParameterString(app, dist, param1, param2)
+            % Helper function to create parameter display string
+            switch dist
+                case {'Normal', 'LogNormal'}
+                    paramStr = sprintf('μ=%.2f, σ=%.2f', param1, param2);
+                case 'Exponential'
+                    paramStr = sprintf('λ=%.2f', param1);
+                case 'Gamma'
+                    paramStr = sprintf('k=%.2f, θ=%.2f', param1, param2);
+                case 'Binomial'
+                    paramStr = sprintf('n=%d, p=%.2f', param1, param2);
+                case 'Poisson'
+                    paramStr = sprintf('λ=%.2f', param1);
+                case 'Weibull'
+                    paramStr = sprintf('k=%.2f, λ=%.2f', param1, param2);
+                case {'Student-t', 'Chi-Squared'}
+                    paramStr = sprintf('ν=%.2f', param1);
+                case 'Pareto'
+                    paramStr = sprintf('α=%.2f, xm=%.2f', param1, param2);
+                otherwise
+                    paramStr = '';
+            end
+        end
+    end
+
+    % Callbacks that handle component events
+    methods (Access = private)
+
+        % Code that executes after component creation
+        function startupFcn(app)
+            app.updateDistributionParameters();
+            app.plotAllDistributions();
+        end
+
+        % Value changed function: DistributionDropDown
+        function DistributionDropDownValueChanged(app, event)
+            app.updateDistributionParameters();
+            app.plotAllDistributions();
+        end
+
+        % Value changed function: Parameter1Slider, Parameter2Slider
+        function ParameterSliderValueChanged(app, event)
+            app.plotAllDistributions();
+        end
+
+        % Value changed function: NumPointsEditField
+        function NumPointsEditFieldValueChanged(app, event)
+            app.plotAllDistributions();
+        end
+    end
+
+    % App initialization and construction
+    methods (Access = public)
+
+        % Construct app
+        function app = DistributionVisualizerApp
+            % Create and configure components
+            createComponents(app)
+
+            % Register the app with App Designer
+            registerApp(app, app.UIFigure)
+
+            % Execute the startup function
+            runStartupFcn(app, @startupFcn)
+
+            if nargout == 0
+                clear app
+            end
+        end
+
+        % Code that executes before app deletion
+        function delete(app)
+            % Delete UIFigure when app is deleted
+            delete(app.UIFigure)
+        end
+    end
+end
